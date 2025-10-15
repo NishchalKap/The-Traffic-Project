@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Traffic Controller - Simulation Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/simulation.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="simulation-container">
+        <!-- Header -->
+        <header class="simulation-header">
+            <h1><i class="fas fa-traffic-light"></i> Smart Traffic Controller - Simulation Dashboard</h1>
+            <div class="simulation-controls">
+                <button id="start-simulation" class="btn btn-success">
+                    <i class="fas fa-play"></i> Start Simulation
+                </button>
+                <button id="stop-simulation" class="btn btn-danger" disabled>
+                    <i class="fas fa-stop"></i> Stop Simulation
+                </button>
+                <div class="simulation-status">
+                    <span class="status-indicator" id="status-indicator"></span>
+                    <span id="simulation-status-text">Stopped</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="simulation-content">
+            <!-- Left Panel - Controls -->
+            <div class="left-panel">
+                <!-- Intersection Setup -->
+                <div class="control-section">
+                    <h3><i class="fas fa-cog"></i> Simulation Setup</h3>
+                    <div class="form-group">
+                        <label for="intersection-count">Number of Intersections:</label>
+                        <select id="intersection-count">
+                            <option value="2">2 Intersections</option>
+                            <option value="3" selected>3 Intersections</option>
+                            <option value="4">4 Intersections</option>
+                            <option value="5">5 Intersections</option>
+                            <option value="6">6 Intersections</option>
+                        </select>
+                    </div>
+                    <button id="apply-intersections" class="btn btn-primary">
+                        <i class="fas fa-check"></i> Apply Changes
+                    </button>
+                </div>
+
+                <!-- Traffic Scenarios -->
+                <div class="control-section">
+                    <h3><i class="fas fa-road"></i> Traffic Scenarios</h3>
+                    <div class="scenario-grid" id="scenario-grid">
+                        <!-- Scenarios will be loaded dynamically -->
+                    </div>
+                </div>
+
+                <!-- Manual Vehicle Control -->
+                <div class="control-section">
+                    <h3><i class="fas fa-car"></i> Manual Vehicle Control</h3>
+                    <div id="vehicle-controls">
+                        <!-- Vehicle controls will be generated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Emergency Controls -->
+                <div class="control-section">
+                    <h3><i class="fas fa-ambulance"></i> Emergency Controls</h3>
+                    <div id="emergency-controls">
+                        <!-- Emergency controls will be generated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Monitoring -->
+            <div class="right-panel">
+                <!-- Intersection Status Grid -->
+                <div class="monitoring-section">
+                    <h3><i class="fas fa-eye"></i> Live Monitoring</h3>
+                    <div class="intersection-grid" id="intersection-grid">
+                        <!-- Intersection cards will be generated dynamically -->
+                    </div>
+                </div>
+
+                <!-- System Statistics -->
+                <div class="monitoring-section">
+                    <h3><i class="fas fa-chart-line"></i> System Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-label">Uptime</div>
+                                <div class="stat-value" id="system-uptime">00:00:00</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-sync"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-label">Optimizations</div>
+                                <div class="stat-value" id="optimization-count">0</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-label">Errors</div>
+                                <div class="stat-value" id="error-count">0</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-ambulance"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-label">Emergencies</div>
+                                <div class="stat-value" id="emergency-count">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Log Output -->
+                <div class="monitoring-section">
+                    <h3><i class="fas fa-terminal"></i> System Log</h3>
+                    <div class="log-container" id="log-container">
+                        <div class="log-entry">System ready. Start simulation to begin monitoring.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+        // Global variables
+        let simulationActive = false;
+        let currentIntersections = 3;
+        let updateInterval;
+        let startTime = Date.now();
+        let logEntries = [];
+
+        // Initialize the simulation dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+            loadTrafficScenarios();
+            generateIntersectionControls();
+            startMonitoring();
+        });
+
+        // Initialize dashboard
+        function initializeDashboard() {
+            // Event listeners
+            document.getElementById('start-simulation').addEventListener('click', startSimulation);
+            document.getElementById('stop-simulation').addEventListener('click', stopSimulation);
+            document.getElementById('apply-intersections').addEventListener('click', applyIntersectionChanges);
+            
+            // Update uptime every second
+            setInterval(updateUptime, 1000);
+        }
+
+        // Load traffic scenarios
+        async function loadTrafficScenarios() {
+            try {
+                const response = await fetch('/api/simulation/scenarios');
+                const data = await response.json();
+                
+                const scenarioGrid = document.getElementById('scenario-grid');
+                scenarioGrid.innerHTML = '';
+                
+                Object.entries(data.scenarios).forEach(([id, scenario]) => {
+                    const scenarioCard = document.createElement('div');
+                    scenarioCard.className = 'scenario-card';
+                    scenarioCard.innerHTML = `
+                        <div class="scenario-header">
+                            <h4>${scenario.name}</h4>
+                            <p>${scenario.description}</p>
+                        </div>
+                        <div class="scenario-actions">
+                            <button class="btn btn-sm btn-outline-primary" onclick="loadScenario('${id}')">
+                                <i class="fas fa-play"></i> Load
+                            </button>
+                        </div>
+                    `;
+                    scenarioGrid.appendChild(scenarioCard);
+                });
+            } catch (error) {
+                addLogEntry('Error loading scenarios: ' + error.message, 'error');
+            }
+        }
+
+        // Generate intersection controls
+        function generateIntersectionControls() {
+            generateVehicleControls();
+            generateEmergencyControls();
+            generateIntersectionCards();
+        }
+
+        // Generate vehicle controls
+        function generateVehicleControls() {
+            const container = document.getElementById('vehicle-controls');
+            container.innerHTML = '';
+            
+            for (let i = 1; i <= currentIntersections; i++) {
+                const intersectionId = `intersection_${i}`;
+                const controlDiv = document.createElement('div');
+                controlDiv.className = 'vehicle-control-item';
+                controlDiv.innerHTML = `
+                    <label>Intersection ${i}:</label>
+                    <div class="vehicle-control-input">
+                        <input type="number" id="vehicles-${intersectionId}" min="0" max="100" value="0">
+                        <button class="btn btn-sm btn-outline-primary" onclick="setVehicleCount('${intersectionId}')">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(controlDiv);
+            }
+        }
+
+        // Generate emergency controls
+        function generateEmergencyControls() {
+            const container = document.getElementById('emergency-controls');
+            container.innerHTML = '';
+            
+            for (let i = 1; i <= currentIntersections; i++) {
+                const intersectionId = `intersection_${i}`;
+                const controlDiv = document.createElement('div');
+                controlDiv.className = 'emergency-control-item';
+                controlDiv.innerHTML = `
+                    <label>Intersection ${i}:</label>
+                    <div class="emergency-control-buttons">
+                        <button class="btn btn-sm btn-warning" onclick="triggerEmergency('${intersectionId}')">
+                            <i class="fas fa-ambulance"></i> Emergency
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="clearEmergency('${intersectionId}')">
+                            <i class="fas fa-check"></i> Clear
+                        </button>
+                    </div>
+                `;
+                container.appendChild(controlDiv);
+            }
+        }
+
+        // Generate intersection monitoring cards
+        function generateIntersectionCards() {
+            const container = document.getElementById('intersection-grid');
+            container.innerHTML = '';
+            
+            for (let i = 1; i <= currentIntersections; i++) {
+                const intersectionId = `intersection_${i}`;
+                const card = document.createElement('div');
+                card.className = 'intersection-card';
+                card.id = `card-${intersectionId}`;
+                card.innerHTML = `
+                    <div class="intersection-header">
+                        <h4>Intersection ${i}</h4>
+                        <div class="intersection-id">${intersectionId}</div>
+                    </div>
+                    <div class="intersection-content">
+                        <div class="traffic-light-display">
+                            <div class="traffic-light" id="light-${intersectionId}">
+                                <div class="light red"></div>
+                                <div class="light yellow"></div>
+                                <div class="light green"></div>
+                            </div>
+                            <div class="light-status">
+                                <div class="signal-text" id="signal-${intersectionId}">Red</div>
+                                <div class="countdown" id="countdown-${intersectionId}">--s</div>
+                            </div>
+                        </div>
+                        <div class="traffic-metrics">
+                            <div class="metric">
+                                <span class="metric-label">Vehicles:</span>
+                                <span class="metric-value" id="vehicles-${intersectionId}">0</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Density:</span>
+                                <span class="metric-value" id="density-${intersectionId}">Low</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Emergency:</span>
+                                <span class="metric-value" id="emergency-${intersectionId}">No</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        }
+
+        // Start simulation
+        async function startSimulation() {
+            try {
+                showLoading();
+                
+                const response = await fetch('/api/simulation/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        intersections: currentIntersections
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    simulationActive = true;
+                    document.getElementById('start-simulation').disabled = true;
+                    document.getElementById('stop-simulation').disabled = false;
+                    document.getElementById('simulation-status-text').textContent = 'Running';
+                    document.getElementById('status-indicator').className = 'status-indicator active';
+                    
+                    addLogEntry(data.message, 'success');
+                    startTime = Date.now();
+                } else {
+                    addLogEntry('Failed to start simulation: ' + data.error, 'error');
+                }
+            } catch (error) {
+                addLogEntry('Error starting simulation: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Stop simulation
+        async function stopSimulation() {
+            try {
+                const response = await fetch('/api/simulation/stop', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    simulationActive = false;
+                    document.getElementById('start-simulation').disabled = false;
+                    document.getElementById('stop-simulation').disabled = true;
+                    document.getElementById('simulation-status-text').textContent = 'Stopped';
+                    document.getElementById('status-indicator').className = 'status-indicator';
+                    
+                    addLogEntry(data.message, 'info');
+                }
+            } catch (error) {
+                addLogEntry('Error stopping simulation: ' + error.message, 'error');
+            }
+        }
+
+        // Apply intersection changes
+        function applyIntersectionChanges() {
+            const newCount = parseInt(document.getElementById('intersection-count').value);
+            if (newCount !== currentIntersections) {
+                currentIntersections = newCount;
+                generateIntersectionControls();
+                addLogEntry(`Updated to ${newCount} intersections`, 'info');
+            }
+        }
+
+        // Load traffic scenario
+        async function loadScenario(scenarioId) {
+            try {
+                const response = await fetch('/api/simulation/load_scenario', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        scenario_id: scenarioId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLogEntry(data.message, 'success');
+                    // Update vehicle count inputs
+                    Object.entries(data.scenario.vehicle_counts).forEach(([id, count]) => {
+                        const input = document.getElementById(`vehicles-${id}`);
+                        if (input) {
+                            input.value = count;
+                        }
+                    });
+                } else {
+                    addLogEntry('Failed to load scenario: ' + data.error, 'error');
+                }
+            } catch (error) {
+                addLogEntry('Error loading scenario: ' + error.message, 'error');
+            }
+        }
+
+        // Set vehicle count
+        async function setVehicleCount(intersectionId) {
+            const count = parseInt(document.getElementById(`vehicles-${intersectionId}`).value);
+            
+            try {
+                const response = await fetch('/api/simulation/set_vehicles', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        intersection_id: intersectionId,
+                        vehicle_count: count
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLogEntry(data.message, 'info');
+                } else {
+                    addLogEntry('Failed to set vehicle count: ' + data.error, 'error');
+                }
+            } catch (error) {
+                addLogEntry('Error setting vehicle count: ' + error.message, 'error');
+            }
+        }
+
+        // Trigger emergency
+        async function triggerEmergency(intersectionId) {
+            try {
+                const response = await fetch('/api/simulation/trigger_emergency', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        intersection_id: intersectionId,
+                        type: 'Emergency Vehicle'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLogEntry(data.message, 'warning');
+                } else {
+                    addLogEntry('Failed to trigger emergency: ' + data.error, 'error');
+                }
+            } catch (error) {
+                addLogEntry('Error triggering emergency: ' + error.message, 'error');
+            }
+        }
+
+        // Clear emergency
+        async function clearEmergency(intersectionId) {
+            try {
+                const response = await fetch('/api/simulation/clear_emergency', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        intersection_id: intersectionId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLogEntry(data.message, 'info');
+                } else {
+                    addLogEntry('Failed to clear emergency: ' + data.error, 'error');
+                }
+            } catch (error) {
+                addLogEntry('Error clearing emergency: ' + error.message, 'error');
+            }
+        }
+
+        // Start monitoring
+        function startMonitoring() {
+            updateInterval = setInterval(updateDashboard, 2000); // Update every 2 seconds
+        }
+
+        // Update dashboard
+        async function updateDashboard() {
+            if (!simulationActive) return;
+            
+            try {
+                // Update simulation status
+                const statusResponse = await fetch('/api/simulation/status');
+                const statusData = await statusResponse.json();
+                
+                // Update each intersection
+                for (let i = 1; i <= currentIntersections; i++) {
+                    const intersectionId = `intersection_${i}`;
+                    await updateIntersection(intersectionId);
+                }
+                
+                // Update system statistics
+                await updateSystemStats();
+                
+            } catch (error) {
+                addLogEntry('Error updating dashboard: ' + error.message, 'error');
+            }
+        }
+
+        // Update individual intersection
+        async function updateIntersection(intersectionId) {
+            try {
+                const response = await fetch(`/api/traffic_data?intersection_id=${intersectionId}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    addLogEntry(`Error updating ${intersectionId}: ${data.error}`, 'error');
+                    return;
+                }
+                
+                // Update vehicle count
+                document.getElementById(`vehicles-${intersectionId}`).textContent = data.vehicle_count;
+                
+                // Update density
+                document.getElementById(`density-${intersectionId}`).textContent = data.density;
+                
+                // Update emergency status
+                const emergencyText = data.emergency ? 'Yes' : 'No';
+                const emergencyElement = document.getElementById(`emergency-${intersectionId}`);
+                emergencyElement.textContent = emergencyText;
+                emergencyElement.className = data.emergency ? 'metric-value emergency' : 'metric-value';
+                
+                // Update traffic light
+                updateTrafficLight(intersectionId, data.traffic_light);
+                
+            } catch (error) {
+                addLogEntry(`Error updating ${intersectionId}: ${error.message}`, 'error');
+            }
+        }
+
+        // Update traffic light display
+        function updateTrafficLight(intersectionId, lightData) {
+            const lightElement = document.getElementById(`light-${intersectionId}`);
+            const signalElement = document.getElementById(`signal-${intersectionId}`);
+            const countdownElement = document.getElementById(`countdown-${intersectionId}`);
+            
+            // Clear all active states
+            lightElement.querySelectorAll('.light').forEach(light => light.classList.remove('active'));
+            
+            // Set active light
+            const activeLight = lightElement.querySelector(`.${lightData.signal.toLowerCase()}`);
+            if (activeLight) {
+                activeLight.classList.add('active');
+            }
+            
+            // Update signal text and countdown
+            signalElement.textContent = lightData.signal;
+            countdownElement.textContent = `${Math.ceil(lightData.duration)}s`;
+        }
+
+        // Update system statistics
+        async function updateSystemStats() {
+            try {
+                const response = await fetch('/api/optimization_stats');
+                const data = await response.json();
+                
+                if (data.optimization_stats) {
+                    document.getElementById('optimization-count').textContent = 
+                        data.optimization_stats.total_intersections || 0;
+                }
+                
+                if (data.signal_stats) {
+                    document.getElementById('error-count').textContent = 
+                        data.signal_stats.total_intersections || 0;
+                }
+                
+            } catch (error) {
+                // Silently handle stats errors
+            }
+        }
+
+        // Update uptime
+        function updateUptime() {
+            const now = Date.now();
+            const uptime = now - startTime;
+            const hours = Math.floor(uptime / 3600000);
+            const minutes = Math.floor((uptime % 3600000) / 60000);
+            const seconds = Math.floor((uptime % 60000) / 1000);
+            
+            document.getElementById('system-uptime').textContent = 
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Add log entry
+        function addLogEntry(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logContainer = document.getElementById('log-container');
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.innerHTML = `
+                <span class="log-time">[${timestamp}]</span>
+                <span class="log-message">${message}</span>
+            `;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Keep only last 50 entries
+            while (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        // Show loading overlay
+        function showLoading() {
+            document.getElementById('loading-overlay').style.display = 'flex';
+        }
+
+        // Hide loading overlay
+        function hideLoading() {
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 100);
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

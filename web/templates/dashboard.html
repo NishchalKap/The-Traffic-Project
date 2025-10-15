@@ -1,0 +1,258 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Traffic Management Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+<div class="dashboard">
+    <h1>🚦 Smart Traffic Dashboard</h1>
+    
+    <!-- Navigation -->
+    <div class="nav-buttons">
+        <a href="/" class="nav-btn active">Live Dashboard</a>
+        <a href="/simulation" class="nav-btn">Simulation Mode</a>
+    </div>
+    
+    <!-- Intersection Selection -->
+    <div class="control-panel">
+        <label for="intersection-select">Select Intersection:</label>
+        <select id="intersection-select" onchange="switchIntersection()">
+            <option value="intersection_1">Intersection 1</option>
+            <option value="intersection_2">Intersection 2</option>
+            <option value="intersection_3">Intersection 3</option>
+        </select>
+    </div>
+    
+    <!-- Traffic Metrics -->
+    <div class="card-row">
+        <div class="metric-card">
+            <div class="metric-title">Live Vehicle Count</div>
+            <div class="metric-value" id="vehicle-count">--</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-title">Current Traffic Density</div>
+            <div class="metric-value" id="density">--</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-title">Intersection ID</div>
+            <div class="metric-value" id="intersection-id">--</div>
+        </div>
+    </div>
+    
+    <!-- Traffic Light Control -->
+    <div class="metric-card">
+        <div class="metric-title">Traffic Light Control</div>
+        <div class="light-container">
+            <div id="traffic-light-display">
+                <div class="light-signal" id="light-signal"></div>
+            </div>
+            <div class="light-details">
+                <p><strong>Current Signal:</strong> <span id="current-signal">--</span></p>
+                <p><strong>Time Remaining:</strong> <span id="light-duration">--s</span></p>
+                <p><strong>Reason:</strong> <span id="light-reason">--</span></p>
+                <p><strong>In Transition:</strong> <span id="transition-status">--</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Control Buttons -->
+    <div class="metric-card">
+        <div class="metric-title">Manual Controls</div>
+        <div class="control-buttons">
+            <button id="btn-force-green" class="control-btn green-btn">Force Green</button>
+            <button id="btn-force-red" class="control-btn red-btn">Force Red</button>
+            <button id="btn-force-yellow" class="control-btn yellow-btn">Force Yellow</button>
+            <button id="btn-force-emergency" class="control-btn emergency-btn">Emergency Override</button>
+            <button id="btn-reset" class="control-btn reset-btn">Reset System</button>
+        </div>
+    </div>
+    
+    <!-- Incident Reports -->
+    <div class="metric-card" id="incident-report" style="display: none;">
+        <div class="metric-title incident-title">🚨 Incident Alert!</div>
+        <div class="incident-details">
+            <p><strong>Type:</strong> <span id="incident-type"></span></p>
+            <p><strong>Location:</strong> <span id="incident-location"></span></p>
+            <p><strong>Description:</strong> <span id="incident-description"></span></p>
+            <p><strong>Severity:</strong> <span id="incident-severity"></span></p>
+            <p><strong>Status:</strong> <span id="incident-status"></span></p>
+        </div>
+    </div>
+    
+    <!-- Emergency Vehicle Alert -->
+    <div class="metric-card" id="emergency-report" style="display: none;">
+        <div class="metric-title" style="color:#ff5722;">🚑 Emergency Vehicle Detected</div>
+        <p>The system is prioritizing the route for an emergency vehicle.</p>
+    </div>
+    
+    <!-- System Statistics -->
+    <div class="metric-card">
+        <div class="metric-title">System Statistics</div>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="stat-label">Last Update:</span>
+                <span class="stat-value" id="last-update">--</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">System Status:</span>
+                <span class="stat-value" id="system-status">Active</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let countdownInterval = null;
+    let currentIntersection = 'intersection_1';
+    let lastUpdateTime = null;
+
+    function startCountdown(seconds) {
+        clearInterval(countdownInterval);
+        let remaining = Math.max(0, seconds);
+        const el = document.getElementById('light-duration');
+        el.textContent = `${remaining}s`;
+        
+        countdownInterval = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+                clearInterval(countdownInterval);
+                el.textContent = '0s';
+                return;
+            }
+            el.textContent = `${remaining}s`;
+        }, 1000);
+    }
+
+    function fetchTrafficData() {
+        // Stop any running countdown as new data will refresh it
+        clearInterval(countdownInterval); 
+        
+        const url = `/api/traffic_data?intersection_id=${currentIntersection}`;
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error fetching traffic data:', data.error);
+                    document.getElementById('system-status').textContent = 'API Error';
+                    return;
+                }
+                
+                // Update basic metrics
+                document.getElementById('vehicle-count').textContent = data.vehicle_count;
+                document.getElementById('density').textContent = data.density;
+                document.getElementById('intersection-id').textContent = data.intersection_id;
+                
+                // Update traffic light display
+                const lightElement = document.getElementById('light-signal');
+                const signal = data.traffic_light.signal;
+                lightElement.className = 'light-signal ' + signal.toLowerCase();
+                
+                // Update signal details
+                document.getElementById('current-signal').textContent = signal;
+                document.getElementById('light-reason').textContent = data.traffic_light.reason;
+                document.getElementById('transition-status').textContent = 
+                    data.traffic_light.transition ? 'Yes' : 'No';
+                
+                // Start countdown
+                startCountdown(parseInt(data.traffic_light.duration || 0, 10));
+                
+                // Update incident report
+                const incidentCard = document.getElementById('incident-report');
+                if (data.latest_incident) {
+                    document.getElementById('incident-type').textContent = data.latest_incident.type;
+                    document.getElementById('incident-location').textContent = data.latest_incident.location;
+                    document.getElementById('incident-description').textContent = data.latest_incident.description;
+                    document.getElementById('incident-severity').textContent = data.latest_incident.severity;
+                    document.getElementById('incident-status').textContent = data.latest_incident.status;
+                    incidentCard.style.display = 'block';
+                } else {
+                    incidentCard.style.display = 'none';
+                }
+                
+                // Update emergency report
+                const emergCard = document.getElementById('emergency-report');
+                emergCard.style.display = data.emergency ? 'block' : 'none';
+                
+                // Update last update time
+                lastUpdateTime = new Date().toLocaleTimeString();
+                document.getElementById('last-update').textContent = lastUpdateTime;
+                document.getElementById('system-status').textContent = 'Active';
+                
+            })
+            .catch(error => {
+                console.error('Network or parsing error:', error);
+                document.getElementById('system-status').textContent = 'Network Error';
+            });
+    }
+
+    function switchIntersection() {
+        currentIntersection = document.getElementById('intersection-select').value;
+        console.log('Switched to intersection:', currentIntersection);
+        fetchTrafficData();
+    }
+
+    // Manual control functions
+    function controlSignal(signal) {
+        // Use an arbitrary high duration for manual overrides
+        const duration = 60; 
+        const url = `/api/signal_control/${currentIntersection}/${signal}?duration=${duration}`;
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log(`Signal changed to ${signal}`);
+                    // Immediate manual override doesn't use transition, force a refresh after a moment
+                    setTimeout(fetchTrafficData, 100); 
+                } else {
+                    console.error('Error controlling signal:', data.error);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    function emergencyOverride() {
+        const url = `/api/emergency/${currentIntersection}`;
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Emergency override activated');
+                    setTimeout(fetchTrafficData, 100); 
+                } else {
+                    console.error('Error with emergency override:', data.error);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    function resetSystem() {
+        controlSignal('Red');
+        setTimeout(() => {
+            console.log('System reset to safe state');
+            fetchTrafficData();
+        }, 1000);
+    }
+
+    // Event listeners
+    document.getElementById('btn-force-green').addEventListener('click', () => controlSignal('Green'));
+    document.getElementById('btn-force-red').addEventListener('click', () => controlSignal('Red'));
+    document.getElementById('btn-force-yellow').addEventListener('click', () => controlSignal('Yellow'));
+    document.getElementById('btn-force-emergency').addEventListener('click', emergencyOverride);
+    document.getElementById('btn-reset').addEventListener('click', resetSystem);
+
+    // Initialize and start periodic updates
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchTrafficData();
+        // The API endpoint handles signal control based on traffic data, so this loops
+        // keeps the dashboard responsive and the logic running.
+        setInterval(fetchTrafficData, 2500); 
+    });
+</script>
+
+</body>
+</html>
