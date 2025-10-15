@@ -349,6 +349,41 @@ body {
     font-size: 1.5em;
     font-weight: 700;
     color: #ff6b6b;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid #ff6b6b;
+    transition: all 0.3s ease;
+    min-width: 50px;
+    text-align: center;
+}
+
+.countdown.red-countdown {
+    color: #dc3545;
+    border-color: #dc3545;
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.countdown.yellow-countdown {
+    color: #ffc107;
+    border-color: #ffc107;
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.countdown.green-countdown {
+    color: #28a745;
+    border-color: #28a745;
+    background: rgba(40, 167, 69, 0.1);
+}
+
+.countdown.transitioning {
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
 }
 
 /* Traffic Metrics */

@@ -152,48 +152,68 @@ def get_traffic_data():
             camera_data['emergency'] = True
         
         # Get latest incident
-        latest_incident = Incident.query.order_by(Incident.timestamp.desc()).first()
+        latest_incident = None
         incident_report = None
         is_incident = False
         
-        if latest_incident:
-            is_incident = True
-            incident_report = {
-                "type": latest_incident.incident_type,
-                "location": f"{latest_incident.latitude}, {latest_incident.longitude}",
-                "description": latest_incident.description,
-                "severity": latest_incident.severity,
-                "status": latest_incident.status
-            }
+        try:
+            latest_incident = Incident.query.order_by(Incident.timestamp.desc()).first()
+            if latest_incident:
+                is_incident = True
+                incident_report = {
+                    "type": latest_incident.incident_type,
+                    "location": f"{latest_incident.latitude}, {latest_incident.longitude}",
+                    "description": latest_incident.description,
+                    "severity": latest_incident.severity,
+                    "status": latest_incident.status
+                }
+        except Exception as e:
+            print(f"Error getting incident: {e}")
         
-        # This part simulates the optimization logic for the dashboard view
+        # Create traffic analysis data
         traffic_analysis_data = [{
             'intersection_id': intersection_id,
             'vehicle_count': camera_data['vehicle_count'],
             'density': camera_data['density'],
-            'wait_time': 0, # Placeholder, true wait time is calculated in the main thread
+            'wait_time': 0,  # Placeholder
             'emergency': camera_data['emergency'],
             'incident_present': is_incident
         }]
         
-        # Use the optimizer to get a signal suggestion
-        optimized_signals = traffic_optimizer.optimize_traffic_signals(traffic_analysis_data)
-        
-        if not optimized_signals:
-            return jsonify({"error": "No optimized signals generated"}), 500
-        
-        optimized_signal_data = optimized_signals[0]
-        
-        # Apply the signal change via the signal controller
-        signal_result = signal_controller.update_signal(
-            intersection_id=intersection_id,
-            target_signal=optimized_signal_data['signal'],
-            duration=optimized_signal_data['duration'],
-            reason=optimized_signal_data['reason']
-        )
-        
-        # Get the actual current state after the update (could be Yellow during transition)
-        final_signal_state = signal_controller.get_signal_state(intersection_id)
+        # Try to get optimized signals
+        try:
+            optimized_signals = traffic_optimizer.optimize_traffic_signals(traffic_analysis_data)
+            
+            if optimized_signals:
+                optimized_signal_data = optimized_signals[0]
+                
+                # Apply the signal change via the signal controller
+                signal_result = signal_controller.update_signal(
+                    intersection_id=intersection_id,
+                    target_signal=optimized_signal_data['signal'],
+                    duration=optimized_signal_data['duration'],
+                    reason=optimized_signal_data['reason']
+                )
+                
+                # Get the actual current state after the update
+                final_signal_state = signal_controller.get_signal_state(intersection_id)
+            else:
+                # Fallback signal state
+                final_signal_state = {
+                    'signal': 'Red',
+                    'duration': 30,
+                    'reason': 'Default state',
+                    'in_transition': False
+                }
+        except Exception as e:
+            print(f"Error in traffic optimization: {e}")
+            # Fallback signal state
+            final_signal_state = {
+                'signal': 'Red',
+                'duration': 30,
+                'reason': 'Fallback state',
+                'in_transition': False
+            }
         
         return jsonify({
             "vehicle_count": camera_data['vehicle_count'],
@@ -210,6 +230,36 @@ def get_traffic_data():
             "timestamp": time.time()
         })
         
+    except Exception as e:
+        print(f"Error in traffic_data API: {e}")
+        # Return fallback data
+        return jsonify({
+            "vehicle_count": 5,
+            "density": "Medium",
+            "traffic_light": {
+                "signal": "Red",
+                "duration": 30,
+                "reason": "Error fallback",
+                "transition": False
+            },
+            "emergency": False,
+            "latest_incident": None,
+            "intersection_id": intersection_id,
+            "timestamp": time.time(),
+            "error": str(e)
+        })
+
+@app.route('/api/optimization_stats')
+def get_optimization_stats():
+    """Get optimization statistics."""
+    try:
+        return jsonify({
+            "uptime": time.time() - start_time if 'start_time' in globals() else 0,
+            "optimization_count": 0,  # Placeholder
+            "error_count": 0,  # Placeholder
+            "active_intersections": simulation_state['intersections'],
+            "simulation_active": simulation_state['active']
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

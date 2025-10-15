@@ -26,6 +26,11 @@ class CameraAnalyzer:
         self.cameras = {}  # Store camera instances for multiple intersections
         self.detection_history = {}  # Store detection history for each intersection
         
+        # Initialize detection history for common intersections
+        for i in range(1, 7):  # Support up to 6 intersections
+            intersection_id = f"intersection_{i}"
+            self.detection_history[intersection_id] = deque(maxlen=10)
+        
         # Default camera settings
         self.source = os.getenv('OPENCV_VIDEO_SOURCE', '0')
         if self.source.isdigit():
@@ -105,6 +110,14 @@ class CameraAnalyzer:
             Dictionary containing vehicle count, density, and emergency status
         """
         try:
+            # Check if we have simulation data for this intersection
+            if intersection_id in self.detection_history and self.detection_history[intersection_id]:
+                latest_data = self.detection_history[intersection_id][-1]
+                # Return the latest simulation data if it's recent (within 5 seconds)
+                if time.time() - latest_data['timestamp'] < 5:
+                    return latest_data
+            
+            # Try to get camera data
             camera_data = self._get_camera_for_intersection(intersection_id)
             if not camera_data:
                 # Return fallback data if camera unavailable
@@ -144,6 +157,10 @@ class CameraAnalyzer:
                 'emergency': emergency,
                 'timestamp': time.time()
             }
+            
+            # Ensure detection history exists for this intersection
+            if intersection_id not in self.detection_history:
+                self.detection_history[intersection_id] = deque(maxlen=10)
             
             self.detection_history[intersection_id].append(analysis_result)
             

@@ -48,6 +48,31 @@
                     </button>
                 </div>
 
+                <!-- Camera Feed Selection -->
+                <div class="control-section">
+                    <h3><i class="fas fa-video"></i> Camera Feed Selection</h3>
+                    <div class="form-group">
+                        <label for="camera-source">Camera Source:</label>
+                        <select id="camera-source">
+                            <option value="0">Default Camera (0)</option>
+                            <option value="1">Camera 1</option>
+                            <option value="2">Camera 2</option>
+                            <option value="simulation">Simulation Mode</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="camera-intersection">Monitor Intersection:</label>
+                        <select id="camera-intersection">
+                            <option value="intersection_1">Intersection 1</option>
+                            <option value="intersection_2">Intersection 2</option>
+                            <option value="intersection_3">Intersection 3</option>
+                        </select>
+                    </div>
+                    <button id="apply-camera" class="btn btn-secondary">
+                        <i class="fas fa-camera"></i> Apply Camera Settings
+                    </button>
+                </div>
+
                 <!-- Traffic Scenarios -->
                 <div class="control-section">
                     <h3><i class="fas fa-road"></i> Traffic Scenarios</h3>
@@ -162,6 +187,7 @@
             document.getElementById('start-simulation').addEventListener('click', startSimulation);
             document.getElementById('stop-simulation').addEventListener('click', stopSimulation);
             document.getElementById('apply-intersections').addEventListener('click', applyIntersectionChanges);
+            document.getElementById('apply-camera').addEventListener('click', applyCameraSettings);
             
             // Update uptime every second
             setInterval(updateUptime, 1000);
@@ -366,6 +392,30 @@
             }
         }
 
+        // Apply camera settings
+        function applyCameraSettings() {
+            const cameraSource = document.getElementById('camera-source').value;
+            const cameraIntersection = document.getElementById('camera-intersection').value;
+            
+            addLogEntry(`Camera source set to: ${cameraSource}, Monitoring: ${cameraIntersection}`, 'info');
+            
+            // Update camera intersection options based on current intersections
+            updateCameraIntersectionOptions();
+        }
+
+        // Update camera intersection options
+        function updateCameraIntersectionOptions() {
+            const cameraIntersectionSelect = document.getElementById('camera-intersection');
+            cameraIntersectionSelect.innerHTML = '';
+            
+            for (let i = 1; i <= currentIntersections; i++) {
+                const option = document.createElement('option');
+                option.value = `intersection_${i}`;
+                option.textContent = `Intersection ${i}`;
+                cameraIntersectionSelect.appendChild(option);
+            }
+        }
+
         // Load traffic scenario
         async function loadScenario(scenarioId) {
             try {
@@ -542,18 +592,44 @@
             const signalElement = document.getElementById(`signal-${intersectionId}`);
             const countdownElement = document.getElementById(`countdown-${intersectionId}`);
             
+            if (!lightElement || !signalElement || !countdownElement) {
+                console.warn(`Traffic light elements not found for ${intersectionId}`);
+                return;
+            }
+            
             // Clear all active states
             lightElement.querySelectorAll('.light').forEach(light => light.classList.remove('active'));
             
-            // Set active light
-            const activeLight = lightElement.querySelector(`.${lightData.signal.toLowerCase()}`);
+            // Set active light based on signal
+            const signal = lightData.signal.toLowerCase();
+            const activeLight = lightElement.querySelector(`.${signal}`);
             if (activeLight) {
                 activeLight.classList.add('active');
             }
             
-            // Update signal text and countdown
+            // Update signal text
             signalElement.textContent = lightData.signal;
-            countdownElement.textContent = `${Math.ceil(lightData.duration)}s`;
+            
+            // Update countdown with proper formatting
+            const duration = Math.max(0, Math.ceil(lightData.duration));
+            countdownElement.textContent = `${duration}s`;
+            
+            // Add visual feedback for different states
+            countdownElement.className = 'countdown';
+            if (signal === 'red') {
+                countdownElement.classList.add('red-countdown');
+            } else if (signal === 'yellow') {
+                countdownElement.classList.add('yellow-countdown');
+            } else if (signal === 'green') {
+                countdownElement.classList.add('green-countdown');
+            }
+            
+            // Add transition effect
+            if (lightData.transition) {
+                countdownElement.classList.add('transitioning');
+            } else {
+                countdownElement.classList.remove('transitioning');
+            }
         }
 
         // Update system statistics
