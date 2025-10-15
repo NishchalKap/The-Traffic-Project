@@ -38,6 +38,74 @@ camera_analyzer = CameraAnalyzer()
 traffic_optimizer = TrafficOptimizer()
 signal_controller = SignalController()
 
+# Coordinated signal cycle configuration (two-phase: Main vs Cross)
+COORD_CYCLE = {
+    'MAIN_GREEN': 40,   # seconds
+    'MAIN_YELLOW': 4,   # seconds
+    'CROSS_GREEN': 40,  # seconds
+    'CROSS_YELLOW': 4   # seconds
+}
+
+def _total_cycle_seconds():
+    return sum(COORD_CYCLE.values())
+
+def _intersection_offset_seconds(index_zero_based: int) -> int:
+    """Provide a small progression offset per intersection to create a green wave.
+    Example: 0s, 3s, 6s, 9s, 12s ...
+    """
+    progression_step = 3  # seconds between intersections
+    return progression_step * index_zero_based
+
+def _phase_at_time(now_seconds: float, offset_seconds: int) -> tuple[str, int]:
+    """Return (phase_name, seconds_into_phase) for given time and offset."""
+    cycle = _total_cycle_seconds()
+    t = int((now_seconds + offset_seconds) % cycle)
+    a = COORD_CYCLE['MAIN_GREEN']
+    b = a + COORD_CYCLE['MAIN_YELLOW']
+    c = b + COORD_CYCLE['CROSS_GREEN']
+    d = c + COORD_CYCLE['CROSS_YELLOW']
+    if t < a:
+        return ('MAIN_GREEN', t)
+    if t < b:
+        return ('MAIN_YELLOW', t - a)
+    if t < c:
+        return ('CROSS_GREEN', t - b)
+    # t < d
+    return ('CROSS_YELLOW', t - c)
+
+def _remaining_in_phase(now_seconds: float, offset_seconds: int, phase_name: str, seconds_into_phase: int) -> int:
+    phase_length = COORD_CYCLE[phase_name]
+    return max(0, phase_length - seconds_into_phase)
+
+def get_coordinated_target(intersection_id: str, intersections_count: int) -> dict:
+    """Compute coordinated target signal and duration for an intersection.
+    Returns dict: { signal, duration, reason }
+    """
+    try:
+        # Determine index for offset (intersection_1 -> 0, etc.)
+        try:
+            idx = int(intersection_id.split('_')[-1]) - 1
+        except Exception:
+            idx = 0
+        offset = _intersection_offset_seconds(idx)
+        now_s = time.time()
+        phase, into = _phase_at_time(now_s, offset)
+        remaining = _remaining_in_phase(now_s, offset, phase, into)
+
+        # Map phases to facing approach signal. We expose a single-head signal in UI, so
+        # treat MAIN phases as Green/Yellow; CROSS phases as Red (during Main) and Green/Yellow during Cross.
+        if phase == 'MAIN_GREEN':
+            return { 'signal': 'Green', 'duration': remaining, 'reason': 'Coordinated main green' }
+        if phase == 'MAIN_YELLOW':
+            return { 'signal': 'Yellow', 'duration': remaining, 'reason': 'Coordinated main yellow' }
+        if phase == 'CROSS_GREEN':
+            return { 'signal': 'Red', 'duration': remaining, 'reason': 'Cross street green (red here)' }
+        # CROSS_YELLOW
+        return { 'signal': 'Red', 'duration': remaining, 'reason': 'Cross street yellow (red here)' }
+    except Exception:
+        # Fallback
+        return { 'signal': 'Red', 'duration': 30, 'reason': 'Coordinator fallback' }
+
 # Simulation state
 simulation_state = {
     'active': False,
@@ -180,38 +248,35 @@ def get_traffic_data():
             'incident_present': is_incident
         }]
         
-        # Try to get optimized signals
+        # Coordinated scheduler with emergency preemption
         try:
-            optimized_signals = traffic_optimizer.optimize_traffic_signals(traffic_analysis_data)
-            
-            if optimized_signals:
-                optimized_signal_data = optimized_signals[0]
-                
-                # Apply the signal change via the signal controller
-                signal_result = signal_controller.update_signal(
-                    intersection_id=intersection_id,
-                    target_signal=optimized_signal_data['signal'],
-                    duration=optimized_signal_data['duration'],
-                    reason=optimized_signal_data['reason']
-                )
-                
-                # Get the actual current state after the update
-                final_signal_state = signal_controller.get_signal_state(intersection_id)
-            else:
-                # Fallback signal state
+            # Emergency preemption: if emergency at this intersection, force Green with a short yellow handoff
+            emergency_active = simulation_state['emergency_states'].get(intersection_id, False) or camera_data.get('emergency', False)
+            if emergency_active:
+                # Immediately provide a protected green; UI shows transitioning when switching
                 final_signal_state = {
-                    'signal': 'Red',
-                    'duration': 30,
-                    'reason': 'Default state',
-                    'in_transition': False
+                    'signal': 'Green',
+                    'duration': 20,
+                    'reason': 'Emergency preemption',
+                    'in_transition': True
                 }
+            else:
+                # Compute coordinated target
+                coordinated = get_coordinated_target(intersection_id, simulation_state['intersections'])
+                # Apply to controller to respect safe transitions (Yellow, etc.)
+                signal_controller.update_signal(
+                    intersection_id=intersection_id,
+                    target_signal=coordinated['signal'],
+                    duration=coordinated['duration'],
+                    reason=coordinated['reason']
+                )
+                final_signal_state = signal_controller.get_signal_state(intersection_id)
         except Exception as e:
-            print(f"Error in traffic optimization: {e}")
-            # Fallback signal state
+            print(f"Error in coordinated scheduler: {e}")
             final_signal_state = {
                 'signal': 'Red',
                 'duration': 30,
-                'reason': 'Fallback state',
+                'reason': 'Coordinator fallback',
                 'in_transition': False
             }
         
