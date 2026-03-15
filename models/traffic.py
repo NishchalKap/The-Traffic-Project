@@ -1,4 +1,4 @@
-﻿"""
+"""
 Traffic intersection and signal models for the Smart Traffic Controller.
 """
 

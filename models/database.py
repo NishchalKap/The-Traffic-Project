@@ -1,4 +1,4 @@
-﻿"""
+"""
 Database models for storing GPS data and traffic incidents.
 """
 

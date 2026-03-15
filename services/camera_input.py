@@ -1,4 +1,4 @@
-﻿"""
+"""
 Camera input and vehicle detection service.
 
 This module handles camera feed analysis, vehicle detection, and emergency vehicle detection.
@@ -26,11 +26,6 @@ class CameraAnalyzer:
         self.cameras = {}  # Store camera instances for multiple intersections
         self.detection_history = {}  # Store detection history for each intersection
         
-        # Initialize detection history for common intersections
-        for i in range(1, 7):  # Support up to 6 intersections
-            intersection_id = f"intersection_{i}"
-            self.detection_history[intersection_id] = deque(maxlen=10)
-        
         # Default camera settings
         self.source = os.getenv('OPENCV_VIDEO_SOURCE', '0')
         if self.source.isdigit():
@@ -50,7 +45,7 @@ class CameraAnalyzer:
             # For now, we'll use the same camera source for all intersections
             cap = cv2.VideoCapture(self.source)
             if not cap.isOpened():
-                print(f"Warning: Could not open camera for {intersection_id}")
+                print(f"⚠️  Warning: Could not open camera for {intersection_id}")
                 return None
             
             # Initialize background subtractor
@@ -110,14 +105,6 @@ class CameraAnalyzer:
             Dictionary containing vehicle count, density, and emergency status
         """
         try:
-            # Check if we have simulation data for this intersection
-            if intersection_id in self.detection_history and self.detection_history[intersection_id]:
-                latest_data = self.detection_history[intersection_id][-1]
-                # Return the latest simulation data if it's recent (within 5 seconds)
-                if time.time() - latest_data['timestamp'] < 5:
-                    return latest_data
-            
-            # Try to get camera data
             camera_data = self._get_camera_for_intersection(intersection_id)
             if not camera_data:
                 # Return fallback data if camera unavailable
@@ -158,16 +145,12 @@ class CameraAnalyzer:
                 'timestamp': time.time()
             }
             
-            # Ensure detection history exists for this intersection
-            if intersection_id not in self.detection_history:
-                self.detection_history[intersection_id] = deque(maxlen=10)
-            
             self.detection_history[intersection_id].append(analysis_result)
             
             return analysis_result
             
         except Exception as e:
-            print(f"Error analyzing intersection {intersection_id}: {e}")
+            print(f"❌ Error analyzing intersection {intersection_id}: {e}")
             return self._get_fallback_analysis(intersection_id)
     
     def _analyze_frame(self, frame: np.ndarray, camera_data: dict) -> int:
@@ -289,7 +272,7 @@ class CameraAnalyzer:
         for intersection_id, camera_data in self.cameras.items():
             if 'cap' in camera_data and camera_data['cap'].isOpened():
                 camera_data['cap'].release()
-                print(f"Released camera for {intersection_id}")
+                print(f"📹 Released camera for {intersection_id}")
         
         self.cameras.clear()
         self.detection_history.clear()

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Configuration settings for the Smart Traffic Light Controller.
 """
 

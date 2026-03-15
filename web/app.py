@@ -1,4 +1,4 @@
-﻿"""
+"""
 Flask application configuration for the Smart Traffic Light Controller web interface.
 """
 
@@ -12,6 +12,7 @@ from models.database import db
 # Initialize Flask app
 app = Flask(__name__)
 app.config.from_object(Config)
+Config.init_app(app)
 
 # Initialize database
 db.init_app(app)
@@ -23,212 +24,26 @@ def create_tables():
         from models.database import GPSData, Incident
         db.create_all()
 
-# Import routes directly
-from flask import render_template, jsonify, request
-import time
-import random
-import threading
+# Import and register blueprints
+# Routes will be imported after app is created
 
-# Initialize services
+# Add routes directly to avoid circular imports
+from flask import render_template, jsonify, request
+from models.database import Incident
 from services.camera_input import CameraAnalyzer
 from services.traffic_optimizer import TrafficOptimizer
 from services.signal_controller import SignalController
+import time
 
+# Initialize services
 camera_analyzer = CameraAnalyzer()
 traffic_optimizer = TrafficOptimizer()
 signal_controller = SignalController()
 
-# Global single-green scheduler with emergency preemption
-SCHED_DURATIONS = {
-    'GREEN': 40,
-    'YELLOW': 4
-}
-
-_GLOBAL_SCHED = {
-    'current': 'intersection_1',
-    'phase': 'GREEN',
-    'phase_until': 0.0,
-    'last_set': 0.0
-}
-
-def _init_scheduler_if_needed():
-    if _GLOBAL_SCHED['phase_until'] == 0.0:
-        now = time.time()
-        _GLOBAL_SCHED['phase'] = 'GREEN'
-        _GLOBAL_SCHED['phase_until'] = now + SCHED_DURATIONS['GREEN']
-        _GLOBAL_SCHED['last_set'] = now
-
-def _first_active_emergency() -> str | None:
-    try:
-        for i in range(1, simulation_state['intersections'] + 1):
-            k = f"intersection_{i}"
-            if simulation_state['emergency_states'].get(k, False):
-                return k
-        return None
-    except Exception:
-        return None
-
-def _next_intersection_id(current: str) -> str:
-    try:
-        idx = int(current.split('_')[-1])
-    except Exception:
-        idx = 1
-    idx += 1
-    if idx > simulation_state['intersections']:
-        idx = 1
-    return f"intersection_{idx}"
-
-def _advance_scheduler(now: float):
-    _init_scheduler_if_needed()
-    emergency = _first_active_emergency()
-    if emergency:
-        # Lock to emergency intersection with steady GREEN; others RED.
-        if _GLOBAL_SCHED['current'] != emergency or _GLOBAL_SCHED['phase'] != 'GREEN':
-            _GLOBAL_SCHED['current'] = emergency
-            _GLOBAL_SCHED['phase'] = 'GREEN'
-            _GLOBAL_SCHED['phase_until'] = now + max(10, SCHED_DURATIONS['GREEN'])
-            _GLOBAL_SCHED['last_set'] = now
-        return
-
-    # No emergency: round-robin single GREEN with YELLOW clearance
-    if now >= _GLOBAL_SCHED['phase_until']:
-        if _GLOBAL_SCHED['phase'] == 'GREEN':
-            _GLOBAL_SCHED['phase'] = 'YELLOW'
-            _GLOBAL_SCHED['phase_until'] = now + SCHED_DURATIONS['YELLOW']
-            _GLOBAL_SCHED['last_set'] = now
-        else:
-            _GLOBAL_SCHED['phase'] = 'GREEN'
-            _GLOBAL_SCHED['current'] = _next_intersection_id(_GLOBAL_SCHED['current'])
-            _GLOBAL_SCHED['phase_until'] = now + SCHED_DURATIONS['GREEN']
-            _GLOBAL_SCHED['last_set'] = now
-
-def get_global_signal(intersection_id: str) -> dict:
-    now = time.time()
-    _advance_scheduler(now)
-    emergency = _first_active_emergency()
-    if emergency:
-        if intersection_id == emergency:
-            return {
-                'signal': 'Green',
-                'duration': max(1, int(_GLOBAL_SCHED['phase_until'] - now)),
-                'reason': 'Emergency preemption',
-                'in_transition': False
-            }
-        return {
-            'signal': 'Red',
-            'duration': max(1, int(_GLOBAL_SCHED['phase_until'] - now)),
-            'reason': f'Emergency at {emergency}',
-            'in_transition': False
-        }
-    # No emergency: single-green with yellow for current
-    if intersection_id == _GLOBAL_SCHED['current']:
-        sig = 'Green' if _GLOBAL_SCHED['phase'] == 'GREEN' else 'Yellow'
-        return {
-            'signal': sig,
-            'duration': max(1, int(_GLOBAL_SCHED['phase_until'] - now)),
-            'reason': 'Scheduled rotation',
-            'in_transition': _GLOBAL_SCHED['phase'] == 'YELLOW'
-        }
-    return {
-        'signal': 'Red',
-        'duration': max(1, int(_GLOBAL_SCHED['phase_until'] - now)),
-        'reason': f'Other intersection {_GLOBAL_SCHED['current']} active',
-        'in_transition': False
-    }
-
-# Simulation state
-simulation_state = {
-    'active': False,
-    'intersections': 3,
-    'vehicle_counts': {},
-    'emergency_states': {},
-    'traffic_scenarios': {},
-    'simulation_thread': None
-}
-
-# Predefined traffic scenarios
-TRAFFIC_SCENARIOS = {
-    'rush_hour': {
-        'name': 'Rush Hour',
-        'description': 'High traffic during peak hours',
-        'vehicle_counts': {'intersection_1': 45, 'intersection_2': 38, 'intersection_3': 42},
-        'emergency_probability': 0.05
-    },
-    'light_traffic': {
-        'name': 'Light Traffic',
-        'description': 'Low traffic during off-peak hours',
-        'vehicle_counts': {'intersection_1': 8, 'intersection_2': 5, 'intersection_3': 12},
-        'emergency_probability': 0.01
-    },
-    'emergency_heavy': {
-        'name': 'Emergency Heavy',
-        'description': 'High traffic with frequent emergency vehicles',
-        'vehicle_counts': {'intersection_1': 35, 'intersection_2': 28, 'intersection_3': 32},
-        'emergency_probability': 0.15
-    },
-    'congestion': {
-        'name': 'Traffic Congestion',
-        'description': 'Severe congestion with long wait times',
-        'vehicle_counts': {'intersection_1': 60, 'intersection_2': 55, 'intersection_3': 58},
-        'emergency_probability': 0.08
-    },
-    'night_time': {
-        'name': 'Night Time',
-        'description': 'Very light traffic during night hours',
-        'vehicle_counts': {'intersection_1': 3, 'intersection_2': 2, 'intersection_3': 4},
-        'emergency_probability': 0.02
-    }
-}
-
-def simulation_worker():
-    """Background worker for traffic simulation."""
-    while simulation_state['active']:
-        try:
-            # Update vehicle counts based on simulation
-            for i in range(1, simulation_state['intersections'] + 1):
-                intersection_id = f"intersection_{i}"
-                
-                # Get base vehicle count from scenario or manual setting
-                base_count = simulation_state['vehicle_counts'].get(intersection_id, 0)
-                
-                # Add some randomness to make it more realistic
-                variation = random.randint(-3, 3)
-                vehicle_count = max(0, base_count + variation)
-                
-                # Update emergency state
-                emergency = simulation_state['emergency_states'].get(intersection_id, False)
-                
-                # Simulate emergency vehicle appearance
-                if random.random() < 0.02:  # 2% chance per cycle
-                    simulation_state['emergency_states'][intersection_id] = True
-                    emergency = True
-                elif emergency and random.random() < 0.1:  # 10% chance to clear emergency
-                    simulation_state['emergency_states'][intersection_id] = False
-                    emergency = False
-                
-                # Update the camera analyzer with simulated data
-                camera_analyzer.detection_history[intersection_id] = [{
-                    'vehicle_count': vehicle_count,
-                    'density': 'High' if vehicle_count >= 30 else 'Medium' if vehicle_count >= 15 else 'Low',
-                    'emergency': emergency,
-                    'timestamp': time.time()
-                }]
-            
-            time.sleep(2)  # Update every 2 seconds
-        except Exception as e:
-            print(f"Simulation error: {e}")
-            time.sleep(5)
-
-# Routes
 @app.route('/')
 def index():
     """Serve the main dashboard."""
     return render_template('dashboard.html')
-
-@app.route('/simulation')
-def simulation_dashboard():
-    """Serve the simulation dashboard."""
-    return render_template('simulation_dashboard.html')
 
 @app.route('/api/traffic_data')
 def get_traffic_data():
@@ -250,65 +65,41 @@ def get_traffic_data():
             camera_data['emergency'] = True
         
         # Get latest incident
-        latest_incident = None
+        latest_incident = Incident.query.order_by(Incident.timestamp.desc()).first()
         incident_report = None
         is_incident = False
         
-        try:
-            latest_incident = Incident.query.order_by(Incident.timestamp.desc()).first()
-            if latest_incident:
-                is_incident = True
-                incident_report = {
-                    "type": latest_incident.incident_type,
-                    "location": f"{latest_incident.latitude}, {latest_incident.longitude}",
-                    "description": latest_incident.description,
-                    "severity": latest_incident.severity,
-                    "status": latest_incident.status
-                }
-        except Exception as e:
-            print(f"Error getting incident: {e}")
-        
-        # Create traffic analysis data
-        traffic_analysis_data = [{
-            'intersection_id': intersection_id,
-            'vehicle_count': camera_data['vehicle_count'],
-            'density': camera_data['density'],
-            'wait_time': 0,  # Placeholder
-            'emergency': camera_data['emergency'],
-            'incident_present': is_incident
-        }]
-        
-        # Global single-green scheduler with emergency preemption
-        try:
-            # Compute global mutually-exclusive state
-            state = get_global_signal(intersection_id)
-            # Apply to controller to respect safe transitions
-            signal_controller.update_signal(
-                intersection_id=intersection_id,
-                target_signal=state['signal'],
-                duration=state['duration'],
-                reason=state['reason']
-            )
-            # Fetch actual state (may be Yellow during safe transition)
-            final_signal_state = signal_controller.get_signal_state(intersection_id)
-        except Exception as e:
-            print(f"Error in coordinated scheduler: {e}")
-            final_signal_state = {
-                'signal': 'Red',
-                'duration': 30,
-                'reason': 'Coordinator fallback',
-                'in_transition': False
+        if latest_incident:
+            is_incident = True
+            incident_report = {
+                "type": latest_incident.incident_type,
+                "location": f"{latest_incident.latitude}, {latest_incident.longitude}",
+                "description": latest_incident.description,
+                "severity": latest_incident.severity,
+                "status": latest_incident.status
             }
+        
+        # Get current signal state
+        signal_state = signal_controller.get_signal_state(intersection_id)
+        if not signal_state:
+            # Initialize with default state
+            signal_state = signal_controller.update_signal(
+                intersection_id, "Red", 30, "Initialization"
+            )
+        
+        # Control traffic light based on analysis
+        light_signal = control_traffic_light(
+            camera_data['density'],
+            incident_present=is_incident,
+            emergency_present=camera_data.get('emergency', False),
+            vehicle_count=camera_data.get('vehicle_count', 0),
+            intersection_id=intersection_id
+        )
         
         return jsonify({
             "vehicle_count": camera_data['vehicle_count'],
             "density": camera_data['density'],
-            "traffic_light": {
-                "signal": final_signal_state['signal'],
-                "duration": final_signal_state['duration'],
-                "reason": final_signal_state['reason'],
-                "transition": final_signal_state['in_transition']
-            },
+            "traffic_light": light_signal,
             "emergency": camera_data.get('emergency', False),
             "latest_incident": incident_report,
             "intersection_id": intersection_id,
@@ -316,178 +107,185 @@ def get_traffic_data():
         })
         
     except Exception as e:
-        print(f"Error in traffic_data API: {e}")
-        # Return fallback data
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/intersections')
+def get_all_intersections():
+    """Get data for all intersections."""
+    try:
+        # Get all intersection IDs (this would come from the main controller in a real system)
+        intersection_ids = ['intersection_1', 'intersection_2', 'intersection_3']
+        
+        intersections_data = []
+        for intersection_id in intersection_ids:
+            # Get signal state
+            signal_state = signal_controller.get_signal_state(intersection_id)
+            if not signal_state:
+                signal_state = signal_controller.update_signal(
+                    intersection_id, "Red", 30, "Initialization"
+                )
+            
+            # Get traffic analysis
+            camera_data = camera_analyzer.analyze_intersection(intersection_id)
+            
+            intersections_data.append({
+                "intersection_id": intersection_id,
+                "name": f"Intersection {intersection_id.split('_')[1]}",
+                "signal": signal_state,
+                "traffic": camera_data
+            })
+        
         return jsonify({
-            "vehicle_count": 5,
-            "density": "Medium",
-            "traffic_light": {
-                "signal": "Red",
-                "duration": 30,
-                "reason": "Error fallback",
-                "transition": False
-            },
-            "emergency": False,
-            "latest_incident": None,
-            "intersection_id": intersection_id,
-            "timestamp": time.time(),
-            "error": str(e)
+            "intersections": intersections_data,
+            "timestamp": time.time()
         })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/signal_control/<intersection_id>/<signal>')
+def control_signal(intersection_id, signal):
+    """Manually control a specific signal."""
+    try:
+        if signal not in ['Red', 'Yellow', 'Green']:
+            return jsonify({"error": "Invalid signal color"}), 400
+        
+        duration = int(request.args.get('duration', 30))
+        reason = request.args.get('reason', f'Manual control to {signal}')
+        
+        result = signal_controller.update_signal(intersection_id, signal, duration, reason)
+        
+        return jsonify({
+            "success": True,
+            "signal_control": result,
+            "timestamp": time.time()
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/emergency/<intersection_id>')
+def emergency_override(intersection_id):
+    """Trigger emergency override for an intersection."""
+    try:
+        emergency_type = request.args.get('type', 'Emergency Vehicle')
+        
+        signal_controller.emergency_override(intersection_id, emergency_type)
+        
+        return jsonify({
+            "success": True,
+            "message": f"Emergency override activated for {intersection_id}",
+            "emergency_type": emergency_type,
+            "timestamp": time.time()
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/incidents', methods=['GET', 'POST'])
+def handle_incidents():
+    """Handle traffic incident reporting and retrieval."""
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            incident = Incident(
+                incident_type=data.get('incident_type'),
+                latitude=float(data.get('latitude')),
+                longitude=float(data.get('longitude')),
+                description=data.get('description'),
+                severity=data.get('severity', 'Medium')
+            )
+            
+            db.session.add(incident)
+            db.session.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": "Incident reported successfully",
+                "incident_id": incident.id
+            })
+            
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    
+    else:  # GET
+        try:
+            incidents = Incident.query.order_by(Incident.timestamp.desc()).limit(10).all()
+            
+            incidents_data = []
+            for incident in incidents:
+                incidents_data.append(incident.to_dict())
+            
+            return jsonify({
+                "incidents": incidents_data,
+                "timestamp": time.time()
+            })
+            
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
 @app.route('/api/optimization_stats')
 def get_optimization_stats():
-    """Get optimization statistics."""
+    """Get traffic optimization statistics."""
     try:
-        return jsonify({
-            "uptime": time.time() - start_time if 'start_time' in globals() else 0,
-            "optimization_count": 0,  # Placeholder
-            "error_count": 0,  # Placeholder
-            "active_intersections": simulation_state['intersections'],
-            "simulation_active": simulation_state['active']
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/simulation/start', methods=['POST'])
-def start_simulation():
-    """Start traffic simulation."""
-    try:
-        data = request.get_json()
-        num_intersections = data.get('intersections', 3)
-        
-        # Initialize simulation state
-        simulation_state['intersections'] = num_intersections
-        simulation_state['vehicle_counts'] = {f"intersection_{i}": 0 for i in range(1, num_intersections + 1)}
-        simulation_state['emergency_states'] = {f"intersection_{i}": False for i in range(1, num_intersections + 1)}
-        
-        # Start simulation thread
-        if not simulation_state['active']:
-            simulation_state['active'] = True
-            simulation_state['simulation_thread'] = threading.Thread(target=simulation_worker, daemon=True)
-            simulation_state['simulation_thread'].start()
+        stats = traffic_optimizer.get_optimization_stats()
+        signal_stats = signal_controller.get_signal_statistics()
         
         return jsonify({
-            "success": True,
-            "message": f"Simulation started with {num_intersections} intersections",
-            "intersections": num_intersections
+            "optimization_stats": stats,
+            "signal_stats": signal_stats,
+            "timestamp": time.time()
         })
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/simulation/stop', methods=['POST'])
-def stop_simulation():
-    """Stop traffic simulation."""
-    try:
-        simulation_state['active'] = False
-        return jsonify({
-            "success": True,
-            "message": "Simulation stopped"
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+def control_traffic_light(vehicle_density, incident_present=False, emergency_present=False, 
+                         vehicle_count=0, intersection_id='intersection_1'):
+    """Control traffic light based on traffic conditions."""
+    
+    # Emergency vehicle overrides to immediate green
+    if emergency_present:
+        signal_controller.emergency_override(intersection_id, "Emergency Vehicle")
+        return {"signal": "Green", "duration": 90, "reason": "Emergency Vehicle"}
+    
+    # Incident overrides with solid red
+    if incident_present and not emergency_present:
+        signal_controller.force_signal(intersection_id, "Red", 120, "Incident Reported")
+        return {"signal": "Red", "duration": 120, "reason": "Incident Reported"}
+    
+    # Normal traffic control
+    target = "Green" if vehicle_density in ("High", "Medium") or vehicle_count > 0 else "Red"
+    
+    # Determine duration based on traffic density
+    if target == "Green":
+        if vehicle_density == "High":
+            duration = 60
+        elif vehicle_density == "Medium":
+            duration = 40
+        else:
+            duration = 25
+        reason = f"{vehicle_density} Traffic"
+    else:
+        duration = 15 if vehicle_count == 0 else 5
+        reason = f"{vehicle_density} Traffic"
+    
+    # Update signal
+    signal_controller.update_signal(intersection_id, target, duration, reason)
+    
+    return {"signal": target, "duration": duration, "reason": reason}
 
-@app.route('/api/simulation/status')
-def get_simulation_status():
-    """Get simulation status."""
-    return jsonify({
-        "active": simulation_state['active'],
-        "intersections": simulation_state['intersections'],
-        "vehicle_counts": simulation_state['vehicle_counts'],
-        "emergency_states": simulation_state['emergency_states']
-    })
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors."""
+    return jsonify({"error": "Endpoint not found"}), 404
 
-@app.route('/api/simulation/scenarios')
-def get_traffic_scenarios():
-    """Get available traffic scenarios."""
-    return jsonify({
-        "scenarios": TRAFFIC_SCENARIOS
-    })
-
-@app.route('/api/simulation/load_scenario', methods=['POST'])
-def load_traffic_scenario():
-    """Load a predefined traffic scenario."""
-    try:
-        data = request.get_json()
-        scenario_id = data.get('scenario_id')
-        
-        if scenario_id not in TRAFFIC_SCENARIOS:
-            return jsonify({"error": "Invalid scenario ID"}), 400
-        
-        scenario = TRAFFIC_SCENARIOS[scenario_id]
-        
-        # Update vehicle counts
-        for intersection_id, count in scenario['vehicle_counts'].items():
-            simulation_state['vehicle_counts'][intersection_id] = count
-        
-        return jsonify({
-            "success": True,
-            "message": f"Loaded scenario: {scenario['name']}",
-            "scenario": scenario
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/simulation/set_vehicles', methods=['POST'])
-def set_vehicle_count():
-    """Set vehicle count for a specific intersection."""
-    try:
-        data = request.get_json()
-        intersection_id = data.get('intersection_id')
-        vehicle_count = data.get('vehicle_count', 0)
-        
-        if intersection_id:
-            simulation_state['vehicle_counts'][intersection_id] = max(0, vehicle_count)
-        
-        return jsonify({
-            "success": True,
-            "message": f"Set {intersection_id} to {vehicle_count} vehicles"
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/simulation/trigger_emergency', methods=['POST'])
-def trigger_emergency():
-    """Trigger emergency vehicle at a specific intersection."""
-    try:
-        data = request.get_json()
-        intersection_id = data.get('intersection_id')
-        emergency_type = data.get('type', 'Emergency Vehicle')
-        
-        if intersection_id:
-            simulation_state['emergency_states'][intersection_id] = True
-            
-            # Also trigger emergency override in signal controller
-            signal_controller.emergency_override(intersection_id, emergency_type)
-        
-        return jsonify({
-            "success": True,
-            "message": f"Emergency triggered at {intersection_id}"
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/simulation/clear_emergency', methods=['POST'])
-def clear_emergency():
-    """Clear emergency state at a specific intersection."""
-    try:
-        data = request.get_json()
-        intersection_id = data.get('intersection_id')
-        
-        if intersection_id:
-            simulation_state['emergency_states'][intersection_id] = False
-        
-        return jsonify({
-            "success": True,
-            "message": f"Emergency cleared at {intersection_id}"
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 errors."""
+    db.session.rollback()
+    return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
     create_tables()

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Signal controller service for managing individual traffic signals.
 
 This module handles the control and state management of individual traffic signals,
@@ -217,7 +217,7 @@ class SignalController:
             'reason': reason
         }
         
-        print(f"Emergency signal change: {intersection_id} -> {signal} ({duration}s) - {reason}")
+        print(f"🚨 Emergency signal change: {intersection_id} -> {signal} ({duration}s) - {reason}")
     
     def emergency_override(self, intersection_id: str, emergency_type: str = "Emergency Vehicle"):
         """Handle emergency vehicle override."""
@@ -271,7 +271,7 @@ class SignalController:
                 expired_transitions.append(intersection_id)
         
         for intersection_id in expired_transitions:
-            print(f"Cleaning up expired transition for {intersection_id}")
+            print(f"⚠️  Cleaning up expired transition for {intersection_id}")
             del self.transition_states[intersection_id]
     
     def __del__(self):

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Smart Traffic Light Controller - Main Entry Point
 
@@ -9,24 +9,12 @@ It orchestrates traffic light optimization across multiple intersections.
 import sys
 import time
 import threading
-import logging
 from typing import List, Dict
 from services.traffic_optimizer import TrafficOptimizer
 from services.camera_input import CameraAnalyzer
 from services.signal_controller import SignalController
 from models.traffic import TrafficIntersection
 from config import Config
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('traffic_controller.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger(__name__)
 
 
 class SmartTrafficController:
@@ -39,13 +27,9 @@ class SmartTrafficController:
         self.camera_analyzer = CameraAnalyzer()
         self.signal_controller = SignalController()
         self.running = False
-        self.start_time = None
-        self.optimization_count = 0
-        self.error_count = 0
         
         # Initialize intersections
         self._initialize_intersections()
-        logger.info(f"SmartTrafficController initialized with {num_intersections} intersections")
     
     def _initialize_intersections(self):
         """Initialize traffic intersections with default settings."""
@@ -56,15 +40,12 @@ class SmartTrafficController:
                 position=(0.0, 0.0)  # TODO: Get actual GPS coordinates
             )
             self.intersections.append(intersection)
-            logger.info(f"Initialized {intersection.name} (ID: {intersection.intersection_id})")
             print(f"Initialized {intersection.name} (ID: {intersection.intersection_id})")
     
     def start_system(self):
         """Start the traffic control system."""
-        logger.info(f"Starting Smart Traffic Controller for {self.num_intersections} intersections...")
         print(f"\nStarting Smart Traffic Controller for {self.num_intersections} intersections...")
         self.running = True
-        self.start_time = time.time()
         
         # Start optimization thread
         optimization_thread = threading.Thread(target=self._optimization_loop, daemon=True)
@@ -81,7 +62,6 @@ class SmartTrafficController:
             camera_threads.append(thread)
             thread.start()
         
-        logger.info("System started successfully!")
         print("System started successfully!")
         print("Monitoring traffic and optimizing signals...")
         print("Press Ctrl+C to stop the system\n")
@@ -110,7 +90,6 @@ class SmartTrafficController:
                 
                 # Run optimization algorithm
                 optimized_signals = self.optimizer.optimize_traffic_signals(traffic_data)
-                self.optimization_count += 1
                 
                 # Apply optimized signals
                 for signal_data in optimized_signals:
@@ -138,15 +117,12 @@ class SmartTrafficController:
                         intersection.update_signal(applied['signal'], applied['duration'], applied['reason'])
                         
                         # Log the change
-                        logger.info(f"Signal Change: {intersection.name}: {applied['signal']} for {applied['duration']}s ({applied['reason']})")
-                        print(f"Signal Change: {intersection.name}: {applied['signal']} for {applied['duration']}s ({applied['reason']})")
+                        print(f"UPDATE {intersection.name}: {applied['signal']} for {applied['duration']}s ({applied['reason']})")
                 
                 time.sleep(Config.OPTIMIZATION_INTERVAL)  # Run optimization per config
-                    
+                
             except Exception as e:
-                self.error_count += 1
-                logger.error(f"Error in optimization loop: {e}")
-                print(f"Error in optimization loop: {e}")
+                print(f"ERROR in optimization loop: {e}")
                 time.sleep(Config.OPTIMIZATION_INTERVAL)
     
     def _camera_analysis_loop(self, intersection: TrafficIntersection):
@@ -165,14 +141,11 @@ class SmartTrafficController:
                 time.sleep(Config.CAMERA_ANALYSIS_INTERVAL)  # Analyze per config
                 
             except Exception as e:
-                self.error_count += 1
-                logger.error(f"Error analyzing {intersection.name}: {e}")
-                print(f"Error analyzing {intersection.name}: {e}")
+                print(f"ERROR analyzing {intersection.name}: {e}")
                 time.sleep(Config.CAMERA_ANALYSIS_INTERVAL)
     
     def stop_system(self):
         """Stop the traffic control system."""
-        logger.info("Stopping Smart Traffic Controller...")
         print("\nStopping Smart Traffic Controller...")
         self.running = False
         
@@ -180,62 +153,27 @@ class SmartTrafficController:
         for intersection in self.intersections:
             intersection.current_signal = "Red"
             intersection.signal_duration = 30
-            logger.info(f"{intersection.name}: Emergency stop - Red light")
-            print(f"{intersection.name}: Emergency stop - Red light")
+            print(f"RED {intersection.name}: Emergency stop - Red light")
         
-        # Cleanup resources
-        self.camera_analyzer.cleanup()
-        
-        # Print system statistics
-        if self.start_time:
-            uptime = time.time() - self.start_time
-            logger.info(f"System uptime: {uptime:.2f} seconds")
-            logger.info(f"Total optimizations: {self.optimization_count}")
-            logger.info(f"Total errors: {self.error_count}")
-            print(f"System uptime: {uptime:.2f} seconds")
-            print(f"Total optimizations: {self.optimization_count}")
-            print(f"Total errors: {self.error_count}")
-        
-        logger.info("System stopped safely")
         print("System stopped safely")
-    
-    def get_system_status(self) -> Dict:
-        """Get current system status and statistics."""
-        return {
-            'running': self.running,
-            'uptime': time.time() - self.start_time if self.start_time else 0,
-            'intersections': len(self.intersections),
-            'optimization_count': self.optimization_count,
-            'error_count': self.error_count,
-            'intersection_states': [i.get_current_state() for i in self.intersections]
-        }
 
 
 def get_user_input() -> int:
     """Get the number of intersections from the user."""
-    # For automated testing, use default value
-    try:
-        num_intersections = int(input("Enter the number of intersecting roads (intersections): "))
-    except (EOFError, KeyboardInterrupt):
-        print("Using default value: 3 intersections")
-        return 3
-    
     while True:
         try:
+            num_intersections = int(input("Enter the number of intersecting roads (intersections): "))
             if num_intersections < 1:
-                print("Please enter a number greater than 0.")
-                num_intersections = int(input("Enter the number of intersecting roads (intersections): "))
+                print("ERROR: Please enter a number greater than 0.")
                 continue
             elif num_intersections > 10:
-                print("Warning: More than 10 intersections may impact performance.")
+                print("WARNING: More than 10 intersections may impact performance.")
                 confirm = input("Continue anyway? (y/n): ").lower()
                 if confirm != 'y':
-                    num_intersections = int(input("Enter the number of intersecting roads (intersections): "))
                     continue
             return num_intersections
         except ValueError:
-            print("Please enter a valid number.")
-            num_intersections = int(input("Enter the number of intersecting roads (intersections): "))
+            print("ERROR: Please enter a valid number.")
 
 
 def main():

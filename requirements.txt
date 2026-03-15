@@ -1,4 +1,4 @@
-﻿# Smart Traffic Light Controller Dependencies
+# Smart Traffic Light Controller Dependencies
 
 # Core web framework
 Flask>=2.3.0

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Services module for the Smart Traffic Light Controller.
 
 This module contains the core business logic services:

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -10,12 +10,6 @@
 
 <div class="dashboard">
     <h1>🚦 Smart Traffic Dashboard</h1>
-    
-    <!-- Navigation -->
-    <div class="nav-buttons">
-        <a href="/" class="nav-btn active">Live Dashboard</a>
-        <a href="/simulation" class="nav-btn">Simulation Mode</a>
-    </div>
     
     <!-- Intersection Selection -->
     <div class="control-panel">
@@ -128,9 +122,6 @@
     }
 
     function fetchTrafficData() {
-        // Stop any running countdown as new data will refresh it
-        clearInterval(countdownInterval); 
-        
         const url = `/api/traffic_data?intersection_id=${currentIntersection}`;
         
         fetch(url)
@@ -138,7 +129,6 @@
             .then(data => {
                 if (data.error) {
                     console.error('Error fetching traffic data:', data.error);
-                    document.getElementById('system-status').textContent = 'API Error';
                     return;
                 }
                 
@@ -181,12 +171,11 @@
                 // Update last update time
                 lastUpdateTime = new Date().toLocaleTimeString();
                 document.getElementById('last-update').textContent = lastUpdateTime;
-                document.getElementById('system-status').textContent = 'Active';
                 
             })
             .catch(error => {
-                console.error('Network or parsing error:', error);
-                document.getElementById('system-status').textContent = 'Network Error';
+                console.error('Error fetching traffic data:', error);
+                document.getElementById('system-status').textContent = 'Error';
             });
     }
 
@@ -198,16 +187,13 @@
 
     // Manual control functions
     function controlSignal(signal) {
-        // Use an arbitrary high duration for manual overrides
-        const duration = 60; 
-        const url = `/api/signal_control/${currentIntersection}/${signal}?duration=${duration}`;
+        const url = `/api/signal_control/${currentIntersection}/${signal}`;
         fetch(url)
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     console.log(`Signal changed to ${signal}`);
-                    // Immediate manual override doesn't use transition, force a refresh after a moment
-                    setTimeout(fetchTrafficData, 100); 
+                    fetchTrafficData(); // Refresh data
                 } else {
                     console.error('Error controlling signal:', data.error);
                 }
@@ -222,7 +208,7 @@
             .then(data => {
                 if (data.success) {
                     console.log('Emergency override activated');
-                    setTimeout(fetchTrafficData, 100); 
+                    fetchTrafficData(); // Refresh data
                 } else {
                     console.error('Error with emergency override:', data.error);
                 }
@@ -234,7 +220,6 @@
         controlSignal('Red');
         setTimeout(() => {
             console.log('System reset to safe state');
-            fetchTrafficData();
         }, 1000);
     }
 
@@ -248,9 +233,7 @@
     // Initialize and start periodic updates
     document.addEventListener('DOMContentLoaded', () => {
         fetchTrafficData();
-        // The API endpoint handles signal control based on traffic data, so this loops
-        // keeps the dashboard responsive and the logic running.
-        setInterval(fetchTrafficData, 2500); 
+        setInterval(fetchTrafficData, 2000); // Update every 2 seconds
     });
 </script>
 

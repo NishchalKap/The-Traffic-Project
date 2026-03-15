@@ -1,4 +1,4 @@
-﻿"""
+"""
 Database models for the Smart Traffic Light Controller.
 """
 

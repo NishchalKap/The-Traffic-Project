@@ -1,4 +1,4 @@
-﻿/* Enhanced CSS for Smart Traffic Controller Dashboard */
+/* Enhanced CSS for Smart Traffic Controller Dashboard */
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -19,49 +19,17 @@ body {
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     padding: 30px;
-    -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
 }
 
 h1 {
     text-align: center;
     color: #1a73e8;
-    margin-bottom: 20px;
+    margin-bottom: 30px;
     border-bottom: 3px solid #e8eaed;
     padding-bottom: 20px;
     font-size: 2.2em;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.nav-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-.nav-btn {
-    padding: 10px 20px;
-    background: #f8f9fa;
-    color: #5f6368;
-    text-decoration: none;
-    border-radius: 8px;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    border: 2px solid transparent;
-}
-
-.nav-btn:hover {
-    background: #e3f2fd;
-    color: #1a73e8;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.nav-btn.active {
-    background: #1a73e8;
-    color: white;
-    border-color: #1a73e8;
 }
 
 .control-panel {
@@ -358,3 +326,5 @@ h1 {
         height: 80px;
     }
 }
+
+

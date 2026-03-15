@@ -1,237 +1,193 @@
-# 🚦 Smart Traffic Light Controller
+# Smart Traffic Light Controller
 
-A sophisticated, modular traffic management system that dynamically optimizes traffic light timing across multiple intersections to minimize wait times, prevent congestion, and improve overall traffic flow.
+A sophisticated traffic light control system that optimizes signal timing across multiple intersections to minimize total wait time while maintaining fairness and safety.
 
-## ✨ Key Features
+## Features
 
-### 🎯 **Core Functionality**
-- **Multi-Intersection Support**: Handle and coordinate any number of intersections simultaneously
-- **Dynamic Optimization**: Real-time signal timing optimization based on traffic conditions
-- **Emergency Vehicle Detection**: Automatic detection and priority handling for emergency vehicles
-- **Fairness Controls**: Prevents intersection starvation with intelligent fairness algorithms
-- **Safety Measures**: Proper yellow light transitions for all signal changes
+- **Multi-Intersection Support**: Handle any number of intersecting roads
+- **Real-time Vehicle Detection**: Uses OpenCV for camera-based vehicle counting
+- **Emergency Vehicle Detection**: Automatically detects emergency vehicle flashers
+- **Traffic Optimization Algorithm**: Minimizes total wait time across all intersections
+- **Fairness Controls**: Prevents intersection starvation with configurable fairness parameters
+- **Incident Management**: Handle traffic incidents with automatic signal adjustments
+- **Web Dashboard**: Real-time monitoring and manual control interface
+- **Safety Features**: Proper signal transitions with yellow phases
 
-### 🔧 **Advanced Capabilities**
-- **Real-time Monitoring**: Comprehensive web dashboard with live metrics
-- **Performance Analytics**: Detailed system performance tracking and alerting
-- **Configuration Management**: Dynamic configuration updates without system restart
-- **Robust Error Handling**: Graceful degradation and fallback mechanisms
-- **Comprehensive Testing**: Full test suite with unit and integration tests
-
-### 🌐 **Web Interface**
-- **Live Dashboard**: Real-time traffic metrics and signal status
-- **Manual Controls**: Override signals for emergency situations
-- **Incident Reporting**: Track and manage traffic incidents
-- **System Statistics**: Performance metrics and optimization statistics
-
-## 🏗️ Architecture
-
-The system is built with a modular architecture for maintainability and scalability:
+## Project Structure
 
 ```
-Smart Traffic Light Controller/
-├── main.py                 # Main orchestrator and entry point
+SmartTrafficController/
+├── main.py                 # Main entry point
 ├── config.py              # Configuration settings
-├── config_manager.py      # Dynamic configuration management
-├── monitoring.py          # System monitoring and alerting
-├── test_traffic_system.py # Comprehensive test suite
 ├── models/
-│   ├── traffic.py         # Traffic intersection models
-│   └── database.py        # Database models for incidents
+│   ├── __init__.py
+│   ├── database.py        # Database models (GPS, incidents)
+│   └── traffic.py         # Traffic intersection models
 ├── services/
-│   ├── camera_input.py    # Camera analysis and vehicle detection
-│   ├── signal_controller.py # Signal state management
-│   └── traffic_optimizer.py # Core optimization algorithms
-└── web/
-    ├── app.py            # Flask web application
-    ├── routes.py         # API endpoints
-    ├── templates/
-    │   └── dashboard.html # Web dashboard
-    └── static/css/
-        └── styles.css    # Dashboard styling
+│   ├── __init__.py
+│   ├── camera_input.py    # Camera feed analysis
+│   ├── traffic_optimizer.py # Multi-intersection optimization
+│   └── signal_controller.py # Traffic light control logic
+├── web/
+│   ├── __init__.py
+│   ├── app.py            # Flask app configuration
+│   ├── routes.py         # Web routes and API endpoints
+│   └── templates/
+│       └── dashboard.html # Web dashboard
+├── static/
+│   └── css/
+│       └── styles.css    # Dashboard styling
+├── requirements.txt       # Dependencies
+└── README.md             # This file
 ```
 
-## 🚀 Quick Start
+## Installation
 
-### Prerequisites
-- Python 3.8 or higher
-- OpenCV for camera processing
-- Flask for web interface
+1. **Clone or download the project files**
 
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd TrafficProject
-   ```
-
-2. **Install dependencies**
+2. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Run the system**
+3. **Set up camera source** (optional):
    ```bash
-   python main.py
+   # For webcam (default)
+   export OPENCV_VIDEO_SOURCE=0
+   
+   # For video file
+   export OPENCV_VIDEO_SOURCE=path/to/video.mp4
    ```
 
-4. **Access the web dashboard**
-   Open your browser and navigate to `http://localhost:5000`
+## Usage
 
-### Configuration
+### Command Line Interface
 
-The system uses a hierarchical configuration system:
-
-1. **Default Configuration** (`config.py`): Base settings
-2. **Dynamic Configuration** (`config_manager.py`): Runtime adjustments
-3. **Environment Variables**: Override specific settings
-
-Example configuration file (`traffic_config.json`):
-```json
-{
-  "traffic": {
-    "optimization_interval": 5,
-    "camera_analysis_interval": 2,
-    "min_green_time": 15,
-    "max_green_time": 90,
-    "yellow_time": 3
-  },
-  "optimization": {
-    "wait_time_weight": 0.4,
-    "vehicle_count_weight": 0.3,
-    "emergency_weight": 0.3,
-    "max_consecutive_green": 3
-  },
-  "system": {
-    "log_level": "INFO",
-    "enable_web_interface": true,
-    "web_port": 5000
-  }
-}
-```
-
-## 🧪 Testing
-
-Run the comprehensive test suite:
+Run the main traffic controller:
 
 ```bash
-python test_traffic_system.py
+python main.py
 ```
 
-The test suite includes:
-- Unit tests for all components
-- Integration tests for system workflows
-- Performance tests for optimization algorithms
-- Error handling and edge case testing
+The system will:
+1. Ask for the number of intersections
+2. Initialize camera feeds for each intersection
+3. Start the optimization algorithm
+4. Begin real-time traffic monitoring and signal control
 
-## 📊 Monitoring and Alerting
+### Web Dashboard
 
-The system includes comprehensive monitoring capabilities:
+Start the web interface:
 
-### Performance Metrics
-- Optimization cycle timing
-- Camera analysis performance
-- Signal change frequency
-- System resource usage
-- Error rates and patterns
+```bash
+python web/app.py
+```
 
-### Alert System
-- **INFO**: General system events
-- **WARNING**: Performance issues, high resource usage
-- **ERROR**: System errors, optimization failures
-- **CRITICAL**: System failures, safety issues
+Then open your browser to `http://localhost:5000` to access the dashboard.
 
-### Monitoring Dashboard
-Access real-time monitoring at `http://localhost:5000`:
-- Live traffic metrics
-- Signal status and countdown timers
-- Emergency vehicle alerts
-- Incident reports
-- System performance statistics
+The dashboard provides:
+- Real-time traffic data visualization
+- Manual signal control
+- Emergency override capabilities
+- Incident reporting and monitoring
+- System statistics
 
-## 🔧 API Endpoints
+## API Endpoints
 
-The system provides RESTful API endpoints for integration:
-
-### Traffic Data
 - `GET /api/traffic_data` - Get current traffic data for an intersection
 - `GET /api/intersections` - Get data for all intersections
-
-### Signal Control
-- `GET /api/signal_control/<intersection_id>/<signal>` - Manually control signals
-- `GET /api/emergency/<intersection_id>` - Trigger emergency override
-
-### Incidents
-- `GET /api/incidents` - Get incident reports
-- `POST /api/incidents` - Report new incidents
-
-### System Status
+- `POST /api/signal_control/<id>/<signal>` - Manually control a signal
+- `POST /api/emergency/<id>` - Trigger emergency override
+- `GET/POST /api/incidents` - Report or retrieve traffic incidents
 - `GET /api/optimization_stats` - Get optimization statistics
 
-## 🎛️ Manual Controls
+## Configuration
 
-The web dashboard provides manual control capabilities:
+Edit `config.py` to customize:
 
-- **Force Green**: Override to green signal
-- **Force Red**: Override to red signal
-- **Force Yellow**: Override to yellow signal
-- **Emergency Override**: Priority for emergency vehicles
-- **System Reset**: Reset to safe state
+- **Traffic Light Timing**: Minimum/maximum green times, yellow duration
+- **Vehicle Detection**: Detection thresholds and parameters
+- **Optimization**: Weights for different factors in the algorithm
+- **Fairness**: Maximum consecutive green cycles and fairness windows
 
-## 🔍 Troubleshooting
+## Key Components
+
+### Traffic Optimizer
+Implements a sophisticated algorithm that:
+- Calculates priority scores based on vehicle count, wait time, and emergencies
+- Applies fairness constraints to prevent intersection starvation
+- Optimizes signal timing to minimize total system wait time
+- Handles emergency overrides and incident management
+
+### Camera Analyzer
+Provides vehicle detection using:
+- Background subtraction for motion detection
+- Contour analysis for vehicle counting
+- Emergency vehicle detection via flashing light analysis
+- Fallback mechanisms for camera failures
+
+### Signal Controller
+Manages individual traffic signals with:
+- Proper state transitions (Red → Yellow → Green)
+- Timing constraints and safety checks
+- Emergency override capabilities
+- Historical tracking for optimization
+
+## Safety Features
+
+- **Proper Transitions**: All signal changes include yellow phases
+- **Emergency Overrides**: Immediate priority for emergency vehicles
+- **Incident Handling**: Automatic red signals for blocked intersections
+- **System Failures**: Graceful degradation when cameras fail
+- **Fairness Controls**: Prevents any intersection from being starved
+
+## Development
+
+### Adding New Features
+
+1. **New Detection Methods**: Extend `CameraAnalyzer` class
+2. **Optimization Algorithms**: Modify `TrafficOptimizer` class
+3. **Signal Types**: Update `SignalController` for new signal states
+4. **Web Interface**: Add new routes in `web/routes.py`
+
+### Testing
+
+The system includes built-in testing capabilities:
+- Force green/red signals via web interface
+- Emergency override testing
+- Synthetic data generation when cameras unavailable
+
+## Troubleshooting
 
 ### Common Issues
 
-1. **Camera not working**
-   - Check camera permissions
-   - Verify OpenCV installation
-   - System will use fallback data
+1. **Camera Not Working**: Check `OPENCV_VIDEO_SOURCE` environment variable
+2. **Database Errors**: Ensure `instance/` directory exists and is writable
+3. **Port Conflicts**: Change port in `web/app.py` if 5000 is occupied
 
-2. **High CPU usage**
-   - Reduce optimization frequency
-   - Check camera analysis settings
-   - Monitor system alerts
+### Debug Mode
 
-3. **Web dashboard not loading**
-   - Check Flask installation
-   - Verify port 5000 is available
-   - Check firewall settings
+Run with debug information:
+```bash
+export FLASK_DEBUG=1
+python web/app.py
+```
 
-### Logs
+## License
 
-System logs are written to:
-- Console output (real-time)
-- `traffic_controller.log` (file logging)
+This project is provided as-is for educational and development purposes.
 
-Log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
-
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests for new functionality
-5. Run the test suite
-6. Submit a pull request
+4. Test thoroughly
+5. Submit a pull request
 
-## 📝 License
+## Support
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- OpenCV for computer vision capabilities
-- Flask for web framework
-- The traffic engineering community for optimization algorithms
-
-## 📞 Support
-
-For support and questions:
-- Check the troubleshooting section
-- Review system logs
-- Open an issue on GitHub
-
----
-
-**Note**: This system is designed for educational and research purposes. For production use in real traffic systems, additional safety certifications and regulatory compliance may be required.
+For issues or questions:
+1. Check the troubleshooting section
+2. Review the code comments for implementation details
+3. Test with the built-in simulation modes

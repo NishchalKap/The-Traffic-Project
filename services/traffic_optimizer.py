@@ -1,4 +1,4 @@
-﻿"""
+"""
 Traffic optimization service for multi-intersection coordination.
 
 This module implements the core optimization algorithm that minimizes total wait time
